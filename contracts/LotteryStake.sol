@@ -27,15 +27,24 @@ contract LotteryStake is Ownable {
         uint8 weekday;
     }
 
+    struct Token {
+        address owner;
+        uint points;
+    }
+
     struct Lottery {
+        bool drawExecuted;
+        address drawWinner;
         uint8 month;
         uint16 year;
-        mapping(address => uint) points; 
+        mapping(uint => Token) stakedTokens; 
     }
     
     mapping (uint => uint) checkpoints;     //tokenId => timestamp
     mapping (uint => address) deposits;     //tokenId => address
     mapping (uint => Lottery) lotteries;
+    
+    address[] tickets;
 
     IFungibleToken public fungibleToken;
     IERC721 public nonFungibleToken;
@@ -64,8 +73,10 @@ contract LotteryStake is Ownable {
         nftSupply = _nftSupply;
     }
 
-    function awardPoints(Lottery storage lt, address recipient, uint256 points) internal {
-        lt.points[recipient] += points;
+    function awardPoints(Lottery storage lt, uint tokenId, address recipient, uint256 points) internal {
+        Token storage token = lt.stakedTokens[tokenId];
+        token.owner = recipient;
+        token.points += points;
     }
 
     function awardToken(address recipient) internal {
@@ -180,6 +191,35 @@ contract LotteryStake is Ownable {
         }
     }
 
+    function random(uint max) internal view returns (uint) {
+        return uint(blockhash(block.number - 1)) % max;
+    }
+
+    function randomDraw(uint8 month, uint16 year) external onlyOwner returns (address) {
+        uint index = year.mul(100).add(month);
+        Lottery storage lt = lotteries[index];
+        require(!lt.drawExecuted, "This lottery has already been drawn");
+        delete tickets;
+
+        for (uint x = 0; x < nftSupply; x++) {
+            if (deposits[x] != address(0)) {
+                Token storage tok = lt.stakedTokens[x];
+                for (uint y = 0; y < tok.points; y++) {
+                    tickets.push(tok.owner);
+                }
+            }
+        }
+
+        uint selectedNumber = random(tickets.length - 1);
+
+        lt.drawExecuted = true;
+        lt.drawWinner = tickets[selectedNumber];
+
+        delete tickets;
+
+        return lt.drawWinner;
+    }
+
     function reward(
         uint[] memory s4e1, 
         uint[] memory s3e1, 
@@ -201,7 +241,7 @@ contract LotteryStake is Ownable {
                     //4 star - edition 1
                     for (uint s = 0; s < s4e1.length; s++) {
                         if (x == s4e1[s]) {
-                            awardPoints(lt, deposits[x], E1_MULTIPLIER.mul(S4));
+                            awardPoints(lt, x, deposits[x], E1_MULTIPLIER.mul(S4));
                             break;
                         }
                     }
@@ -209,7 +249,7 @@ contract LotteryStake is Ownable {
                     //3 star - edition 1
                     for (uint s = 0; s < s3e1.length; s++) {
                         if (x == s3e1[s]) {
-                            awardPoints(lt, deposits[x], E1_MULTIPLIER.mul(S3));
+                            awardPoints(lt, x, deposits[x], E1_MULTIPLIER.mul(S3));
                             break;
                         }
                     }
@@ -217,7 +257,7 @@ contract LotteryStake is Ownable {
                     //2 star - edition 1
                     for (uint s = 0; s < s2e1.length; s++) {
                         if (x == s2e1[s]) {
-                            awardPoints(lt, deposits[x], E1_MULTIPLIER.mul(S2));
+                            awardPoints(lt, x, deposits[x], E1_MULTIPLIER.mul(S2));
                             break;
                         }
                     }
@@ -225,7 +265,7 @@ contract LotteryStake is Ownable {
                     //1 star - edition 1
                     for (uint s = 0; s < s1e1.length; s++) {
                         if (x == s1e1[s]) {
-                            awardPoints(lt, deposits[x], E1_MULTIPLIER.mul(S1));
+                            awardPoints(lt, x, deposits[x], E1_MULTIPLIER.mul(S1));
                             break;
                         }
                     }
@@ -233,7 +273,7 @@ contract LotteryStake is Ownable {
                     //4 star - edition 2
                     for (uint s = 0; s < s4e2.length; s++) {
                         if (x == s4e2[s]) {
-                            awardPoints(lt, deposits[x], E2_MULTIPLIER.mul(S4));
+                            awardPoints(lt, x, deposits[x], E2_MULTIPLIER.mul(S4));
                             break;
                         }
                     }
@@ -241,7 +281,7 @@ contract LotteryStake is Ownable {
                     //3 star - edition 2
                     for (uint s = 0; s < s3e2.length; s++) {
                         if (x == s3e2[s]) {
-                            awardPoints(lt, deposits[x], E2_MULTIPLIER.mul(S3));
+                            awardPoints(lt, x, deposits[x], E2_MULTIPLIER.mul(S3));
                             break;
                         }
                     }
@@ -249,7 +289,7 @@ contract LotteryStake is Ownable {
                     //2 star - edition 2
                     for (uint s = 0; s < s2e2.length; s++) {
                         if (x == s2e2[s]) {
-                            awardPoints(lt, deposits[x], E2_MULTIPLIER.mul(S2));
+                            awardPoints(lt, x, deposits[x], E2_MULTIPLIER.mul(S2));
                             break;
                         }
                     }
@@ -257,7 +297,7 @@ contract LotteryStake is Ownable {
                     //1 star - edition 2
                     for (uint s = 0; s < s1e2.length; s++) {
                         if (x == s1e2[s]) {
-                            awardPoints(lt, deposits[x], E2_MULTIPLIER.mul(S1));
+                            awardPoints(lt, x, deposits[x], E2_MULTIPLIER.mul(S1));
                             break;
                         }
                     }
@@ -273,6 +313,5 @@ contract LotteryStake is Ownable {
         nonFungibleToken.transferFrom(address(this), msg.sender, tokenId);
         delete deposits[tokenId];
         delete checkpoints[tokenId];
-        //** Remove user points from latest lottery */
     }
 }
