@@ -40,15 +40,16 @@ contract LotteryStake is Ownable {
         mapping(uint => Token) stakedTokens; 
     }
     
-    mapping (uint => uint) checkpoints;     //tokenId => timestamp
-    mapping (uint => address) deposits;     //tokenId => address
-    mapping (uint => Lottery) lotteries;
+    mapping (uint => uint) public checkpoints;     //tokenId => timestamp
+    mapping (uint => address) public deposits;     //tokenId => address
+    mapping (uint => Lottery) public lotteries;
     
     address[] tickets;
 
     IFungibleToken public fungibleToken;
     IERC721 public nonFungibleToken;
     uint public nftSupply;
+    bool public stakingPaused;
 
     uint constant DAY_IN_SECONDS = 86400;
     uint constant DAILY_TOKEN_REWARD = 1;
@@ -62,15 +63,16 @@ contract LotteryStake is Ownable {
     uint8 constant S4 = 8;
     uint constant YEAR_IN_SECONDS = 31536000;
     
-    constructor(
+    function initialize(
         address _fungibleToken,
         address _nonFungibleToken,
         uint _nftSupply
-    )   
+    ) onlyOwner external   
     {
         fungibleToken = IFungibleToken(_fungibleToken);
         nonFungibleToken = IERC721(_nonFungibleToken);
         nftSupply = _nftSupply;
+        stakingPaused = true;
     }
 
     function awardPoints(Lottery storage lt, uint tokenId, address recipient, uint256 points) internal {
@@ -94,7 +96,12 @@ contract LotteryStake is Ownable {
         return lt;
     }
 
+    function changeNftSupply(uint supply) external onlyOwner {
+        nftSupply = supply;
+    }
+
     function deposit(uint tokenId) external {
+        require(stakingPaused == false, "Staking is currently paused");
         require(msg.sender == nonFungibleToken.ownerOf(tokenId), "You are not the owner of this token");
         nonFungibleToken.transferFrom(msg.sender, address(this), tokenId);
         deposits[tokenId] = msg.sender;
@@ -191,6 +198,10 @@ contract LotteryStake is Ownable {
         }
     }
 
+    function payContractBalance(address payable winner) internal {
+        winner.transfer(address(this).balance);
+    }
+
     function random(uint max) internal view returns (uint) {
         return uint(blockhash(block.number - 1)) % max;
     }
@@ -216,6 +227,9 @@ contract LotteryStake is Ownable {
         lt.drawWinner = tickets[selectedNumber];
 
         delete tickets;
+
+        //pay the winner
+        payContractBalance(payable(lt.drawWinner));
 
         return lt.drawWinner;
     }
@@ -306,6 +320,16 @@ contract LotteryStake is Ownable {
                 }
             }
         }
+    }
+
+    function stakingPause() external onlyOwner {
+        require(stakingPaused == false, "Staking is already paused");
+        stakingPaused = true;
+    }
+
+    function stakingStart() external onlyOwner {
+        require(stakingPaused == true, "Staking has already started");
+        stakingPaused = false;
     }
 
     function withdraw(uint tokenId) external {
