@@ -51,7 +51,7 @@ contract LotteryStake is Ownable {
     uint public nftSupply;
     bool public stakingPaused;
 
-    uint constant DAY_IN_SECONDS = 86400;
+    uint constant DAY_IN_SECONDS = 86400; 
     uint constant DAILY_TOKEN_REWARD = 1;
     uint8 constant E1_MULTIPLIER = 2;
     uint8 constant E2_MULTIPLIER = 1;
@@ -85,13 +85,15 @@ contract LotteryStake is Ownable {
         fungibleToken.mint(recipient, DAILY_TOKEN_REWARD * (uint256(10) ** 18));
     }
 
-    function currentLottery() internal view returns (Lottery storage lt) {
+    function currentLottery() internal returns (Lottery storage lt) {
         uint time = block.timestamp;
         _DateTime memory dt = parseTimestamp(time);
 
         uint index = dt.year.mul(100).add(dt.month);
 
         lt = lotteries[index];
+        lt.year = dt.year;
+        lt.month = dt.month;
         
         return lt;
     }
@@ -121,6 +123,32 @@ contract LotteryStake is Ownable {
         else {
             return 28;
         }
+    }
+
+    function getLotteryPoints(uint index) public view returns (Token[] memory) {
+        Lottery storage lt = lotteries[index];
+        Token[] memory results = new Token[](nftSupply);
+        
+        for (uint x = 0; x < nftSupply; x++) {
+            Token storage value = lt.stakedTokens[x];
+
+            uint addressIndex = nftSupply + 1;
+            for (uint y = 0; y < results.length; y++) {
+                if (results[y].owner == value.owner) {
+                    addressIndex = y;
+                    break;
+                }
+            }
+
+            if (addressIndex <= nftSupply) {
+                results[addressIndex].points += value.points;
+            } else {
+                results[results.length].owner = value.owner;
+                results[results.length].points = value.points;
+            }
+        }
+        
+        return results;
     }
 
     function getYear(uint timestamp) public pure returns (uint16) {
@@ -250,7 +278,11 @@ contract LotteryStake is Ownable {
             if (deposits[x] != address(0)) {
                 
                 //confirm that staked longer than a day
-                if (checkpoints[x] < block.timestamp.sub(DAY_IN_SECONDS)) {
+                //** testing */
+                //uint dayInSeconds = DAY_IN_SECONDS;
+                uint dayInSeconds = 0;
+
+                if (checkpoints[x] <= block.timestamp.sub(dayInSeconds)) {
 
                     //4 star - edition 1
                     for (uint s = 0; s < s4e1.length; s++) {
