@@ -27,9 +27,11 @@ contract LotteryStake is Ownable {
         uint8 weekday;
     }
 
-    struct Token {
-        address owner;
+    struct Points {
+        uint8 month;
+        address participant;
         uint points;
+        uint16 year;
     }
 
     struct Lottery {
@@ -37,19 +39,21 @@ contract LotteryStake is Ownable {
         address drawWinner;
         uint8 month;
         uint16 year;
-        mapping(uint => Token) stakedTokens; 
     }
-    
+
     mapping (uint => uint) public checkpoints;     //tokenId => timestamp
     mapping (uint => address) public deposits;     //tokenId => address
     mapping (uint => Lottery) public lotteries;
+    Points[] public lotteryPoints;
     
     address[] tickets;
 
     IFungibleToken public fungibleToken;
     IERC721 public nonFungibleToken;
     uint public nftSupply;
+    uint public secondsBeforeEarning;
     bool public stakingPaused;
+    uint public stakedTokens;
 
     uint constant DAY_IN_SECONDS = 86400; 
     uint constant DAILY_TOKEN_REWARD = 1;
@@ -66,19 +70,23 @@ contract LotteryStake is Ownable {
     function initialize(
         address _fungibleToken,
         address _nonFungibleToken,
-        uint _nftSupply
+        uint _nftSupply,
+        uint _secondsBeforeEarning
     ) onlyOwner external   
     {
         fungibleToken = IFungibleToken(_fungibleToken);
         nonFungibleToken = IERC721(_nonFungibleToken);
         nftSupply = _nftSupply;
+        secondsBeforeEarning = _secondsBeforeEarning;
         stakingPaused = true;
     }
 
-    function awardPoints(Lottery storage lt, uint tokenId, address recipient, uint256 points) internal {
-        Token storage token = lt.stakedTokens[tokenId];
-        token.owner = recipient;
-        token.points += points;
+    function awardPoints(Lottery storage lt, address recipient, uint256 points) internal {
+        Points storage val = lotteryPoints.push();
+        val.month = lt.month;
+        val.participant = recipient;
+        val.points = points;
+        val.year = lt.year;
     }
 
     function awardToken(address recipient) internal {
@@ -108,6 +116,7 @@ contract LotteryStake is Ownable {
         nonFungibleToken.transferFrom(msg.sender, address(this), tokenId);
         deposits[tokenId] = msg.sender;
         checkpoints[tokenId] = block.timestamp;
+        stakedTokens++;
     }
 
     function getDaysInMonth(uint8 month, uint16 year) public pure returns (uint8) {
@@ -125,30 +134,26 @@ contract LotteryStake is Ownable {
         }
     }
 
-    function getLotteryPoints(uint index) public view returns (Token[] memory) {
-        Lottery storage lt = lotteries[index];
-        Token[] memory results = new Token[](nftSupply);
-        
-        for (uint x = 0; x < nftSupply; x++) {
-            Token storage value = lt.stakedTokens[x];
+    function getLotteryPoints(uint16 year, uint8 month) public view returns (Points[] memory) {
+        uint count = 0;
 
-            uint addressIndex = nftSupply + 1;
-            for (uint y = 0; y < results.length; y++) {
-                if (results[y].owner == value.owner) {
-                    addressIndex = y;
-                    break;
-                }
-            }
-
-            if (addressIndex <= nftSupply) {
-                results[addressIndex].points += value.points;
-            } else {
-                results[results.length].owner = value.owner;
-                results[results.length].points = value.points;
+        for (uint x = 0; x < lotteryPoints.length; x++) {
+            if (lotteryPoints[x].month == month && lotteryPoints[x].year == year) {
+                count++;
             }
         }
         
-        return results;
+        Points[] memory points = new Points[](count);
+        uint y = 0;
+
+        for (uint x = 0; x < lotteryPoints.length; x++) {
+            if (lotteryPoints[x].month == month && lotteryPoints[x].year == year) {
+                points[y] = lotteryPoints[x];
+                y++;
+            }
+        }
+
+        return points;
     }
 
     function getYear(uint timestamp) public pure returns (uint16) {
@@ -236,15 +241,15 @@ contract LotteryStake is Ownable {
 
     function randomDraw(uint8 month, uint16 year) external onlyOwner returns (address) {
         uint index = year.mul(100).add(month);
+
         Lottery storage lt = lotteries[index];
         require(!lt.drawExecuted, "This lottery has already been drawn");
         delete tickets;
 
-        for (uint x = 0; x < nftSupply; x++) {
-            if (deposits[x] != address(0)) {
-                Token storage tok = lt.stakedTokens[x];
-                for (uint y = 0; y < tok.points; y++) {
-                    tickets.push(tok.owner);
+        for (uint x = 0; x < lotteryPoints.length; x++) {
+            if (lotteryPoints[x].month == month && lotteryPoints[x].year == year) {
+                for (uint y = 0; y < lotteryPoints[x].points; y++) {
+                    tickets.push(lotteryPoints[x].participant);
                 }
             }
         }
@@ -276,18 +281,13 @@ contract LotteryStake is Ownable {
         
         for (uint x = 0; x < nftSupply; x++) {
             if (deposits[x] != address(0)) {
-                
-                //confirm that staked longer than a day
-                //** testing */
-                //uint dayInSeconds = DAY_IN_SECONDS;
-                uint dayInSeconds = 0;
-
-                if (checkpoints[x] <= block.timestamp.sub(dayInSeconds)) {
+                //if (checkpoints[x] <= block.timestamp.sub(secondsBeforeEarning)) {
 
                     //4 star - edition 1
                     for (uint s = 0; s < s4e1.length; s++) {
                         if (x == s4e1[s]) {
-                            awardPoints(lt, x, deposits[x], E1_MULTIPLIER.mul(S4));
+                            awardPoints(lt, deposits[x], E1_MULTIPLIER.mul(S4));
+                            awardToken(deposits[x]);
                             break;
                         }
                     }
@@ -295,7 +295,8 @@ contract LotteryStake is Ownable {
                     //3 star - edition 1
                     for (uint s = 0; s < s3e1.length; s++) {
                         if (x == s3e1[s]) {
-                            awardPoints(lt, x, deposits[x], E1_MULTIPLIER.mul(S3));
+                            awardPoints(lt, deposits[x], E1_MULTIPLIER.mul(S3));
+                            awardToken(deposits[x]);
                             break;
                         }
                     }
@@ -303,7 +304,8 @@ contract LotteryStake is Ownable {
                     //2 star - edition 1
                     for (uint s = 0; s < s2e1.length; s++) {
                         if (x == s2e1[s]) {
-                            awardPoints(lt, x, deposits[x], E1_MULTIPLIER.mul(S2));
+                            awardPoints(lt, deposits[x], E1_MULTIPLIER.mul(S2));
+                            awardToken(deposits[x]);
                             break;
                         }
                     }
@@ -311,7 +313,8 @@ contract LotteryStake is Ownable {
                     //1 star - edition 1
                     for (uint s = 0; s < s1e1.length; s++) {
                         if (x == s1e1[s]) {
-                            awardPoints(lt, x, deposits[x], E1_MULTIPLIER.mul(S1));
+                            awardPoints(lt, deposits[x], E1_MULTIPLIER.mul(S1));
+                            awardToken(deposits[x]);
                             break;
                         }
                     }
@@ -319,7 +322,8 @@ contract LotteryStake is Ownable {
                     //4 star - edition 2
                     for (uint s = 0; s < s4e2.length; s++) {
                         if (x == s4e2[s]) {
-                            awardPoints(lt, x, deposits[x], E2_MULTIPLIER.mul(S4));
+                            awardPoints(lt, deposits[x], E2_MULTIPLIER.mul(S4));
+                            awardToken(deposits[x]);
                             break;
                         }
                     }
@@ -327,7 +331,8 @@ contract LotteryStake is Ownable {
                     //3 star - edition 2
                     for (uint s = 0; s < s3e2.length; s++) {
                         if (x == s3e2[s]) {
-                            awardPoints(lt, x, deposits[x], E2_MULTIPLIER.mul(S3));
+                            awardPoints(lt, deposits[x], E2_MULTIPLIER.mul(S3));
+                            awardToken(deposits[x]);
                             break;
                         }
                     }
@@ -335,7 +340,8 @@ contract LotteryStake is Ownable {
                     //2 star - edition 2
                     for (uint s = 0; s < s2e2.length; s++) {
                         if (x == s2e2[s]) {
-                            awardPoints(lt, x, deposits[x], E2_MULTIPLIER.mul(S2));
+                            awardPoints(lt, deposits[x], E2_MULTIPLIER.mul(S2));
+                            awardToken(deposits[x]);
                             break;
                         }
                     }
@@ -343,13 +349,12 @@ contract LotteryStake is Ownable {
                     //1 star - edition 2
                     for (uint s = 0; s < s1e2.length; s++) {
                         if (x == s1e2[s]) {
-                            awardPoints(lt, x, deposits[x], E2_MULTIPLIER.mul(S1));
+                            awardPoints(lt, deposits[x], E2_MULTIPLIER.mul(S1));
+                            awardToken(deposits[x]);
                             break;
                         }
                     }
-
-                    awardToken(deposits[x]);
-                }
+                //}
             }
         }
     }
@@ -364,10 +369,34 @@ contract LotteryStake is Ownable {
         stakingPaused = false;
     }
 
+    function tokensStaked(address staker) external view returns (uint[] memory) {
+        uint[] memory results = new uint[](tokensCountStaked(staker));
+        uint index = 0;
+        for (uint x = 0; x < nftSupply; x++) {
+            if (deposits[x] == staker) {
+                results[index] = x;
+                index++;
+            }
+        }
+
+        return results;
+    }
+
+    function tokensCountStaked(address staker) internal view returns (uint) {
+        uint result = 0;
+        for (uint x = 0; x < nftSupply; x++) {
+            if (deposits[x] == staker) {
+                result++;
+            }
+        }
+        return result;
+    }
+
     function withdraw(uint tokenId) external {
         require(deposits[tokenId] == msg.sender, "You did not stake this token");
         nonFungibleToken.transferFrom(address(this), msg.sender, tokenId);
         delete deposits[tokenId];
         delete checkpoints[tokenId];
+        stakedTokens--;
     }
 }

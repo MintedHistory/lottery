@@ -11,7 +11,7 @@ contract("LotteryStake", async accounts => {
         const fungibleInstance = await fungible.deployed();
         const lotteryInstance = await lottery.deployed();
 
-        await lotteryInstance.initialize(fungibleInstance.address, nonFungibleInstance.address, 320);
+        await lotteryInstance.initialize(fungibleInstance.address, nonFungibleInstance.address, 320, 1);
         await nonFungibleInstance.startPublicMint();
         await nonFungibleInstance.MintNft({ value: web3.utils.toWei(web3.utils.toBN(2))});
         await nonFungibleInstance.setTokenUri(0, "https://gateway.pinata.cloud/ipfs/QmVfY52ZzdcuHj25T5HQzYXvGyJRHgaaL7uwFQvZwj8wzT");
@@ -19,21 +19,16 @@ contract("LotteryStake", async accounts => {
         await nonFungibleInstance.approve(lotteryInstance.address, 0);
         await lotteryInstance.stakingStart();
         await lotteryInstance.deposit(0);
+
+        await fungibleInstance.grantRole("0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6", lotteryInstance.address);
         
         await lotteryInstance.reward([0],[],[],[],[],[],[],[]);
-        const d = new Date();
-        const year = d.getFullYear();
-        const month = d.getMonth();
-        let index = (year * 100) + month;
+        
+        console.log(await lotteryInstance.stakedTokens());
 
-        let lottery = await lotteryInstance.lotteries[index];
+        var value = await lotteryInstance.getLotteryPoints(2022, 1);
 
-        let result = 0;
-        for (let x = 0; x < 320; x++) {
-            result += lottery.stakedTokens[x].points;
-        }
-
-        assert.notEqual(0, result);
+        assert.equal(value[0].points, 16);
         
     });
 });
