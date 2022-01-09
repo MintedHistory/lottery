@@ -290,7 +290,7 @@ contract LotteryStake is Ownable {
         
         for (uint x = 0; x < nftSupply; x++) {
             if (deposits[x] != address(0)) {
-                //if (checkpoints[x] <= block.timestamp.sub(secondsBeforeEarning)) {
+                if (checkpoints[x] <= block.timestamp.sub(secondsBeforeEarning)) {
 
                     //4 star - edition 1
                     for (uint s = 0; s < s4e1.length; s++) {
@@ -363,7 +363,7 @@ contract LotteryStake is Ownable {
                             break;
                         }
                     }
-                //}
+                }
             }
         }
     }

@@ -11,7 +11,7 @@ contract("LotteryStake", async accounts => {
         const fungibleInstance = await fungible.deployed();
         const lotteryInstance = await lottery.deployed();
 
-        await lotteryInstance.initialize(fungibleInstance.address, nonFungibleInstance.address, 320, 1);
+        await lotteryInstance.initialize(fungibleInstance.address, nonFungibleInstance.address, 320, 0);
         await nonFungibleInstance.startPublicMint();
         await nonFungibleInstance.MintNft({ value: web3.utils.toWei(web3.utils.toBN(2))});
         await nonFungibleInstance.setTokenUri(0, "https://gateway.pinata.cloud/ipfs/QmVfY52ZzdcuHj25T5HQzYXvGyJRHgaaL7uwFQvZwj8wzT");
