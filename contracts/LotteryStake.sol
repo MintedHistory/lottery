@@ -93,6 +93,11 @@ contract LotteryStake is Ownable {
         fungibleToken.mint(recipient, DAILY_TOKEN_REWARD * (uint256(10) ** 18));
     }
 
+    function bonusPoints(address recipient, uint points) external onlyOwner {
+        Lottery storage lt = currentLottery();
+        awardPoints(lt, recipient, points);
+    }
+
     function currentLottery() internal returns (Lottery storage lt) {
         uint time = block.timestamp;
         _DateTime memory dt = parseTimestamp(time);
@@ -117,6 +122,10 @@ contract LotteryStake is Ownable {
         deposits[tokenId] = msg.sender;
         checkpoints[tokenId] = block.timestamp;
         stakedTokens++;
+    }
+
+    function fundLottery() payable external {
+
     }
 
     function getDaysInMonth(uint8 month, uint16 year) public pure returns (uint8) {
@@ -235,7 +244,7 @@ contract LotteryStake is Ownable {
         winner.transfer(address(this).balance);
     }
 
-    function random(uint max) internal view returns (uint) {
+    function random(uint max) public view returns (uint) {
         return uint(blockhash(block.number - 1)) % max;
     }
 

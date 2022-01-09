@@ -31,4 +31,15 @@ contract("LotteryStake", async accounts => {
         assert.equal(value[0].points, 16);
         
     });
+    it("Test randomness of function, 10 requests produce 10 different results", async () => {
+        const lotteryInstance = await lottery.deployed();
+        const size = 320;
+        var selections = [];
+        for (var x = 0; x < 10; x++) {
+            var item = await lotteryInstance.random(size);
+            selections.push(item);
+        }
+        
+        assert.equal(new Set(selections).size, selections.length);
+    });
 });
