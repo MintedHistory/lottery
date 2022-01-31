@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/safemath.sol";
-import "./IFungibleToken.sol";
+
+
+
+
+
+
+interface IFungibleToken is IERC20 {
+    function mint(address to, uint256 amount) external;
+}
 
 contract LotteryStake is Ownable {
     
@@ -17,7 +21,7 @@ contract LotteryStake is Ownable {
         uint16 year;
         uint8 month;
         uint8 day;
-        uint8 hour; 
+        uint8 hour;
         uint8 minute;
         uint8 second;
         uint8 weekday;
@@ -405,3 +409,5 @@ contract LotteryStake is Ownable {
         stakedTokens--;
     }
 }
+
+
