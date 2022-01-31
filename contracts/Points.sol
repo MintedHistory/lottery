@@ -63,11 +63,136 @@ contract Points is Ownable {
     uint256 constant YEAR_IN_SECONDS = 31536000;
 
     mapping(uint256 => uint256) public checkpointsRedeemed;
+    mapping(uint16 => mapping (uint8 => address)) public winners;
 
     constructor(address _lotteryContract, address _tokenContract) {
         lotteryContract = ILottery(_lotteryContract);
         tokenContract = IFungibleToken(_tokenContract);
     }
+
+    function drawLastMonthWinner() external onlyOwner returns (address winner) {
+      _DateTime memory today = parseTimestamp(block.timestamp);
+      require(winners[today.year][today.month] != address(0), "The winner has already been drawn for last month");
+      uint timeNow = block.timestamp;
+      timeNow = timeNow - (7 * DAY_IN_SECONDS);
+      _DateTime memory lastMonth = parseTimestamp(timeNow);
+      timeNow = timeNow - ((uint(lastMonth.day) - 1) * DAY_IN_SECONDS);
+      timeNow = timeNow - (uint(lastMonth.hour) * 3600);
+      timeNow = timeNow - (uint(lastMonth.minute) * 60);
+      uint startOfLastMonth = timeNow - uint(lastMonth.second);
+
+      uint staked = 0;
+      for (uint y = 0; y < lotteryContract.nftSupply(); y++) {
+        if (lotteryContract.deposits(y) != address(0)) {
+          staked++;
+        }
+      }
+
+      Leaderboard[] memory results = new Leaderboard[](staked);
+
+      staked = 0;
+      for (uint x = 0; x < lotteryContract.nftSupply(); x++) {
+        if (lotteryContract.deposits(x) != address(0)) {
+          uint timestamp = block.timestamp;
+          if (startOfLastMonth > timestamp) {
+            timestamp = startOfLastMonth;
+          }
+          uint daysVested = (timestamp - lotteryContract.checkpoints(x)).div(DAY_IN_SECONDS);
+          
+          //4 star - edition 1
+          for (uint s = 0; s < s4e1.length; s++) {
+            if (x == s4e1[s]) {
+              results[staked] = Leaderboard(lotteryContract.deposits(x), x, E1_MULTIPLIER.mul(S4).mul(daysVested));
+              staked++;
+              break;
+            }
+          }
+
+          //3 star - edition 1
+          for (uint s = 0; s < s3e1.length; s++) {
+            if (x == s3e1[s]) {
+              results[staked] = Leaderboard(lotteryContract.deposits(x), x, E1_MULTIPLIER.mul(S3).mul(daysVested));
+              staked++;
+              break;
+            }
+          }
+
+          //2 star - edition 1
+          for (uint s = 0; s < s2e1.length; s++) {
+            if (x == s2e1[s]) {
+              results[staked] = Leaderboard(lotteryContract.deposits(x), x, E1_MULTIPLIER.mul(S2).mul(daysVested));
+              staked++;
+              break;
+            }
+          }
+
+          //1 star - edition 1
+          for (uint s = 0; s < s1e1.length; s++) {
+            if (x == s1e1[s]) {
+              results[staked] = Leaderboard(lotteryContract.deposits(x), x, E1_MULTIPLIER.mul(S1).mul(daysVested));
+              staked++;
+              break;
+            }
+          }
+
+          //4 star - edition 2
+          for (uint s = 0; s < s4e2.length; s++) {
+            if (x == s4e2[s]) {
+              results[staked] = Leaderboard(lotteryContract.deposits(x), x, E2_MULTIPLIER.mul(S4).mul(daysVested));
+              staked++;
+              break;
+            }
+          }
+
+          //3 star - edition 2
+          for (uint s = 0; s < s3e2.length; s++) {
+            if (x == s3e2[s]) {
+              results[staked] = Leaderboard(lotteryContract.deposits(x), x, E2_MULTIPLIER.mul(S3).mul(daysVested));
+              staked++;
+              break;
+            }
+          }
+
+          //2 star - edition 2
+          for (uint s = 0; s < s2e2.length; s++) {
+            if (x == s2e2[s]) {
+              results[staked] = Leaderboard(lotteryContract.deposits(x), x, E2_MULTIPLIER.mul(S2).mul(daysVested));
+              staked++;
+              break;
+            }
+          }
+
+          //1 star - edition 2
+          for (uint s = 0; s < s1e2.length; s++) {
+            if (x == s1e2[s]) {
+              results[staked] = Leaderboard(lotteryContract.deposits(x), x, E2_MULTIPLIER.mul(S1).mul(daysVested));
+              staked++;
+              break;
+            }
+          }
+        }
+      }
+
+      uint totalPoints = 0;
+
+      for (uint x = 0; x < results.length; x++) {
+        totalPoints += results[x].points;
+      }
+
+      uint winningIndex = random(totalPoints);
+      address winner;
+      for (uint x = 0; x < results.length; x++) {
+        if (winningIndex < results[x].points) {
+          winner = results[x].holder;
+          break;
+        }
+        winningIndex -= results[x].points;
+      }
+
+      winners[lastMonth.year][lastMonth.day] = winner;
+
+      return winner;
+    } 
 
     function getLeaderboard() public view returns (Leaderboard[] memory) {
       uint startOfMonth = firstDayOfMonth();
@@ -177,6 +302,10 @@ contract Points is Ownable {
         uint256 timeDifference = block.timestamp.sub(lastRedeemed);
 
         return timeDifference.div(DAY_IN_SECONDS);
+    }
+
+    function random(uint max) public view returns (uint) {
+        return uint(blockhash(block.number - 1)) % max;
     }
 
     function redeem(uint256 tokenId) external {
